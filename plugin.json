@@ -1,0 +1,29 @@
+{
+  "name": "meeting-assistant",
+  "displayName": "会议助手（AI 参会 · 实时转写 · 纪要）",
+  "version": "1.4.0",
+  "description": "AI 会议助手：麦克风+系统内录双通道实时转写，云端/本机双通道转写，可选说话人分离与声纹识别，AI 随时参入会议发言，会后自动生成纪要并导出 Markdown。",
+  "author": {
+    "name": "Ruodao"
+  },
+  "ui": "./ui.json",
+  "contributes": {
+    "commands": [
+      {
+        "id": "com.ruodao.meeting.assistant.append-segments",
+        "title": "追加流式句子（实时会议）",
+        "description": "把宿主流式听写通道产出的逐句转写文本（已云端精转写）写回会议时间线，只做持久化不再录音。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "append-segments"
+          ],
+          "cwd": ".",
+          "timeoutMs": 20000
+        }
+      }
+    ]
+  }
+}

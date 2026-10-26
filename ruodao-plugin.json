@@ -1,0 +1,293 @@
+{
+  "id": "com.ruodao.meeting-assistant",
+  "name": "会议助手（AI 参会 · 实时转写 · 纪要）",
+  "version": "1.4.0",
+  "apiVersion": ">=0.1.0 <0.2.0",
+  "description": "AI 会议助手：麦克风+系统内录双通道实时转写，云端 / 本机转写双通道，可选说话人分离与声纹识别，AI 参谋随时发言，会后结构化纪要与 Markdown 导出，会议记录本地持久化。",
+  "requires": {
+    "capabilities": {
+      "required": {
+        "commands": "0.1.0",
+        "code.execute": "0.1.0"
+      }
+    }
+  },
+  "permissions": [
+    "process",
+    "network"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "id": "com.ruodao.meeting.assistant.doctor",
+        "title": "环境自检（ffmpeg / 录音设备 / STT / LLM）",
+        "description": "检查 ffmpeg、麦克风与系统内录设备、云端/本地转写通道与 LLM 配置，列出可选音频设备，不产生费用。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "doctor"
+          ],
+          "cwd": ".",
+          "timeoutMs": 20000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.meeting-create",
+        "title": "创建会议",
+        "description": "创建一条新会议记录（标题 + 可选会议背景），后续实时转写、AI 发言、纪要都写回这条时间线。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "meeting-create"
+          ],
+          "cwd": ".",
+          "timeoutMs": 20000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.meetings-list",
+        "title": "会议列表",
+        "description": "列出全部会议记录（含状态与发言条数）。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "meetings-list"
+          ],
+          "cwd": ".",
+          "timeoutMs": 20000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.meeting-get",
+        "title": "会议详情",
+        "description": "按 id 读取会议完整时间线（逐字稿 + AI 发言 + 纪要）。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "meeting-get"
+          ],
+          "cwd": ".",
+          "timeoutMs": 20000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.meeting-end",
+        "title": "结束会议",
+        "description": "把会议标记为已结束。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "meeting-end"
+          ],
+          "cwd": ".",
+          "timeoutMs": 20000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.meeting-delete",
+        "title": "删除会议",
+        "description": "按 id 删除会议记录（含其全部转写与纪要）。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "meeting-delete"
+          ],
+          "cwd": ".",
+          "timeoutMs": 20000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.record-segment",
+        "title": "录音转写一段（实时会议）",
+        "description": "并行录制麦克风与系统内录各 RUODAO_CAPTURE_SECONDS 秒，分别转写为「我方 / 会议方」发言并写回会议时间线。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "record-segment"
+          ],
+          "cwd": ".",
+          "timeoutMs": 180000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.ai-respond",
+        "title": "邀请 AI 参会发言",
+        "description": "把最近会议上下文交给大模型，生成一段可直接照读的发言稿与要点，作为「AI 参谋」写回会议时间线。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "ai-respond"
+          ],
+          "cwd": ".",
+          "timeoutMs": 90000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.suggest-phrases",
+        "title": "推荐快捷话术",
+        "description": "结合会议背景与最近发言，让大模型推荐一批可直接填入邀请框的快捷话术，不生成发言、不写入会议时间线。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "suggest-phrases"
+          ],
+          "cwd": ".",
+          "timeoutMs": 90000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.minutes",
+        "title": "生成会议纪要",
+        "description": "基于会议逐字稿生成结构化 Markdown 纪要（概要 / 讨论内容 / 结论决议 / 待办 / 风险），保存回会议记录。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "minutes"
+          ],
+          "cwd": ".",
+          "timeoutMs": 180000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.transcribe-file",
+        "title": "录音文件转写（云端/本地）",
+        "description": "上传本地录音文件（wav/mp3/m4a，≤200MB），按当前云端/本地转写通道识别全文并写入一条新会议记录。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "transcribe-file"
+          ],
+          "cwd": ".",
+          "timeoutMs": 300000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.meeting-export",
+        "title": "导出会议 Markdown",
+        "description": "把会议逐字稿与纪要导出为 Markdown 文件（写入会议数据目录，返回文件路径）。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "meeting-export"
+          ],
+          "cwd": ".",
+          "timeoutMs": 30000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.append-segments",
+        "title": "追加流式句子（实时会议）",
+        "description": "把宿主流式听写通道产出的逐句转写文本（已云端精转写，含 speakerId 声纹归属）写回会议时间线，并同步维护说话人名册。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "append-segments"
+          ],
+          "cwd": ".",
+          "timeoutMs": 20000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.meeting-update",
+        "title": "更新会议信息",
+        "description": "修改会议标题、会议背景，或把会议状态改为进行中 / 已结束。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "meeting-update"
+          ],
+          "cwd": ".",
+          "timeoutMs": 20000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.meeting-speaker-update",
+        "title": "维护说话人（改名 / 合并）",
+        "description": "给识别出的说话人设置真实姓名，或把被拆开的两个说话人合并为同一人；时间线内发言同步更新。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "meeting-speaker-update"
+          ],
+          "cwd": ".",
+          "timeoutMs": 20000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.segment-update",
+        "title": "编辑单条发言",
+        "description": "修正某条转写文本或把它改派给另一位说话人。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "segment-update"
+          ],
+          "cwd": ".",
+          "timeoutMs": 20000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.segment-delete",
+        "title": "删除单条发言",
+        "description": "从会议时间线删除一条无效转写，并重新统计说话人发言数。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "segment-delete"
+          ],
+          "cwd": ".",
+          "timeoutMs": 20000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.import-transcript",
+        "title": "导入文件转写结果",
+        "description": "把宿主完成的录音文件转写（含时间轴、本机/云端引擎、说话人分离结果）保存为一条已结束的会议记录。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "import-transcript"
+          ],
+          "cwd": ".",
+          "timeoutMs": 30000
+        }
+      }
+    ]
+  }
+}

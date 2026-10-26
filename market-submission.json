@@ -1,0 +1,30 @@
+{
+  "displayName": "会议助手（AI 参会 · 实时转写 · 纪要）",
+  "slug": "meeting-assistant",
+  "summary": "双通道录音（麦克风+系统内录）、云端/本地双通道转写、AI 参谋随时参会发言、会后纪要生成与 Markdown 导出。",
+  "description": "对标 ai-meeting-workstation 的会议助手功能插件，遵循若道桌面端插件开发文档的声明优先模型，提供 18 个命令：\n1. 环境自检：ffmpeg、麦克风/系统内录设备、云端/本地转写通道与 LLM 配置检查。\n2. 会议管理：创建 / 列出 / 查看 / 结束 / 删除会议，全部记录本地持久化。\n3. 实时会议：并行录制麦克风（我方）与系统内录（会议方）并分别转写，写回会议时间线。\n4. AI 参会：随时邀请 AI 参谋基于最近发言生成可直接照读的发言稿与要点。\n5. 会后纪要：LLM 生成结构化 Markdown 纪要（概要/讨论/决议/待办/风险）。\n6. 文件转写：本地录音文件（≤200MB）走云端或本地 STT 通道转写。\n7. 导出：逐字稿 + 纪要导出 Markdown 文件。\n\n依赖：Node >= 18、ffmpeg（PATH）。模型复用若道模型管理（STT/LLM 绑定自动注入 Key），本地转写支持任意 OpenAI 兼容 whisper/FunASR 服务。\n\n隐私：会议数据只存本机 ~/.ruodao-meeting-assistant/，音频临时文件转写后立即删除；本地通道全程不出本机。",
+  "author": "Ruodao",
+  "category": "Utilities",
+  "tags": [
+    "会议",
+    "语音识别",
+    "AI 参会",
+    "会议纪要",
+    "转写"
+  ],
+  "version": "1.4.0",
+  "repositoryUrl": "",
+  "sourceRef": "",
+  "pluginPath": "",
+  "permissions": [
+    "process",
+    "network"
+  ],
+  "capabilities": [
+    "commands",
+    "code.execute"
+  ],
+  "hasMcpServers": false,
+  "hasSkills": false,
+  "changelog": "1.4.0 新增「AI 参会」：开启后 AI 参谋作为参会者持续听会，按节奏自动接话、可配置参会频率，回复自动标记「自动参会」且支持自动朗读；手动发言与自动参会共用同一 AI 模型，自动接话不重复历史观点。旧版：1.3.1 常见话术改为弹窗选择并填入输入框（不直接发送），支持换一批与基于会议上下文的 AI 推荐。"
+}

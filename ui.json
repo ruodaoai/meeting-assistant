@@ -1,0 +1,97 @@
+{
+  "route": "meeting-assistant",
+  "label": "会议助手",
+  "description": "会议管理工作台：实时会议（麦克风+系统内录 / 可选云端精转写）、录音文件转写（本机或云端 + 说话人分离）、会议记录与说话人维护、AI 参谋、纪要与导出。本机语音模型与面试助手、语音通话共用同一套模型目录，说话人模型按需下载。",
+  "icon": "AudioLines",
+  "version": "1.4.0",
+  "author": "Ruodao",
+  "capabilities": [
+    "commands",
+    "code.execute",
+    "audio-capture",
+    "stt",
+    "local-stt",
+    "cloud-stt",
+    "speaker-diarization",
+    "speaker-management",
+    "llm-answer",
+    "meeting-minutes",
+    "realtime-loop",
+    "file-transcription",
+    "meeting-records"
+  ],
+  "configFields": [
+    {
+      "key": "RUODAO_AUDIO_DEVICE",
+      "label": "麦克风设备名（dshow）",
+      "placeholder": "麦克风 (Realtek Audio)",
+      "secret": false
+    },
+    {
+      "key": "RUODAO_SYSTEM_AUDIO_DEVICE",
+      "label": "系统内录设备名（线上会议对方声音）",
+      "placeholder": "virtual-audio-capturer 或 立体声混音",
+      "secret": false
+    },
+    {
+      "key": "RUODAO_CAPTURE_SECONDS",
+      "label": "每轮录音时长（秒，3-120）",
+      "placeholder": "12",
+      "secret": false
+    },
+    {
+      "key": "RUODAO_STT_SERVICE",
+      "label": "转写服务（若道绑定 / 硅基流动 / 火山 / 本地）",
+      "placeholder": "本地（推荐：装好即用，录音不出本机）",
+      "secret": false
+    },
+    {
+      "key": "RUODAO_STT_CREDENTIAL",
+      "label": "转写凭证（硅基流动填 Key；火山填 AppID:AccessKey；绑定/本地留空）",
+      "placeholder": "sk-... 或 AppID:AccessKey",
+      "secret": true
+    },
+    {
+      "key": "RUODAO_LLM_CHANNEL",
+      "label": "AI 大脑（host=若道模型绑定 / cloud=云端模型 / local=本地模型）",
+      "placeholder": "host",
+      "secret": false
+    },
+    {
+      "key": "RUODAO_CLOUD_LLM_API_KEY",
+      "label": "云端模型 Key（大脑=cloud 时必填，如 DeepSeek）",
+      "placeholder": "sk-...",
+      "secret": true
+    },
+    {
+      "key": "RUODAO_CLOUD_LLM_MODEL",
+      "label": "云端模型名（大脑=cloud 时用，默认 deepseek-chat）",
+      "placeholder": "deepseek-chat",
+      "secret": false
+    },
+    {
+      "key": "RUODAO_LOCAL_LLM_BASE_URL",
+      "label": "本地模型服务地址（大脑=local 时用，如 Ollama）",
+      "placeholder": "http://127.0.0.1:11434/v1",
+      "secret": false
+    },
+    {
+      "key": "RUODAO_LOCAL_LLM_MODEL",
+      "label": "本地模型名（如 qwen2.5:7b）",
+      "placeholder": "qwen2.5:7b",
+      "secret": false
+    },
+    {
+      "key": "RUODAO_MEETING_CONTEXT",
+      "label": "会议主题与背景（拼进 AI 提示词）",
+      "placeholder": "例：与客户评审 Q4 交付计划",
+      "secret": false
+    },
+    {
+      "key": "RUODAO_MEETING_ROLE",
+      "label": "AI 参谋人设",
+      "placeholder": "资深会议参谋",
+      "secret": false
+    }
+  ]
+}
