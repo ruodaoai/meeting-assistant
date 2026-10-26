@@ -1,7 +1,7 @@
 {
   "id": "com.ruodao.meeting-assistant",
   "name": "会议助手（AI 参会 · 实时转写 · 纪要）",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "apiVersion": ">=0.1.0 <0.2.0",
   "description": "AI 会议助手：麦克风+系统内录双通道实时转写，云端 / 本机转写双通道，可选说话人分离与声纹识别，AI 参谋随时发言，会后结构化纪要与 Markdown 导出，会议记录本地持久化。",
   "requires": {

@@ -532,7 +532,7 @@ function llmEndpoint() {
   };
 }
 
-async function chatJson(messages, maxTokens = 1200) {
+async function chatCompletion(messages, maxTokens, jsonMode) {
   const ep = llmEndpoint();
   const base = ep.base.replace(/\/+$/, "");
   if (!base || (ep.channel === "cloud" && !ep.key)) fail(ep.missing);
@@ -549,7 +549,7 @@ async function chatJson(messages, maxTokens = 1200) {
         messages,
         temperature: 0.4,
         max_tokens: maxTokens,
-        response_format: { type: "json_object" },
+        ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
       }),
     });
   } catch (error) {
@@ -558,6 +558,17 @@ async function chatJson(messages, maxTokens = 1200) {
   if (!res.ok) fail(`LLM 请求失败 ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const data = await res.json();
   return data.choices?.[0]?.message?.content ?? "";
+}
+
+// 需要严格 JSON 结构时用（抽取、台账覆写等）；模型会被约束为 JSON 输出。
+async function chatJson(messages, maxTokens = 1200) {
+  return chatCompletion(messages, maxTokens, true);
+}
+
+// 知识库问答 / 周期报告要输出 Markdown 长文：不能用 JSON 模式（会被 JSON 包裹或截断）。
+async function chatText(messages, maxTokens = 4000) {
+  const text = await chatCompletion(messages, maxTokens, false);
+  return text.replace(/^```(?:markdown)?|```$/g, "").trim();
 }
 
 function parseJsonLoose(text) {
@@ -1468,10 +1479,10 @@ async function knowledgeAsk(stdin) {
     `【知识库台账摘要】\n${ledgerLines || "（无匹配条目）"}`,
     `【逐字稿相关片段（按相关度排序）】\n${contextBlocks.join("\n") || "（无匹配片段）"}`,
   ].join("\n\n");
-  const answer = await chatJson([
-    { role: "system", content: `你是企业会议知识库问答助手。只依据提供的材料回答，用中文 Markdown；引用材料时在句尾标注 [编号]；材料不足以回答时明确说明"知识库中没有找到相关记录"，并给出最接近的信息。不要编造。` },
+  const answer = await chatText([
+    { role: "system", content: `你是企业会议知识库问答助手。只依据提供的材料回答，用中文 Markdown；引用材料时在句尾标注 [编号]；材料不足以回答时明确说明"知识库中没有找到相关记录"，并给出最接近的信息。不要编造。直接输出回答正文，不要包代码块，不要包 JSON。` },
     { role: "user", content: `【问题】${question}\n\n${prompt}` },
-  ], 2000);
+  ], 3000);
   const sources = top.slice(0, 8).map((entry, index) => ({
     index: index + 1,
     meetingId: entry.meeting.id,
@@ -1505,11 +1516,11 @@ async function knowledgeReport(stdin) {
   const issueLines = ledger.issues.map((entry) => `- [${entry.status === "open" ? "未解决" : entry.status === "resolved" ? "已解决" : "已搁置"}] ${entry.text}（首提 ${new Date(entry.firstAt).toLocaleDateString("zh-CN")}，挂起 ${entry.daysOpen} 天，讨论 ${entry.meetings.length} 次${entry.note ? `；现状：${entry.note}` : ""}）`).join("\n");
   const decisionLines = ledger.decisions.slice(0, 40).map((entry) => `- ${entry.text}（${new Date(entry.firstAt).toLocaleDateString("zh-CN")}）`).join("\n");
   const actionLines = ledger.actions.slice(0, 40).map((entry) => `- ${entry.text}${entry.owner ? `（负责人：${entry.owner}` : "（负责人：待确认"}${entry.due ? `，截止：${entry.due}` : ""}）`).join("\n");
-  const markdown = await chatJson([
-    { role: "system", content: `你是企业会议知识库分析助手。基于给定材料撰写一份中文 Markdown 周期报告（不要编造材料之外的内容），包含以下小节：\n## 一、本阶段会议概览\n## 二、做出哪些决定\n## 三、解决了哪些问题\n## 四、仍未解决的难题（按挂起时间排序，逐条给出卡点分析与推进建议）\n## 五、待办与责任落实\n## 六、风险与建议\n语言精炼、面向管理者。` },
+  const markdown = await chatText([
+    { role: "system", content: `你是企业会议知识库分析助手。基于给定材料撰写一份中文 Markdown 周期报告（不要编造材料之外的内容），包含以下小节：\n## 一、本阶段会议概览\n## 二、做出哪些决定\n## 三、解决了哪些问题\n## 四、仍未解决的难题（按挂起时间排序，逐条给出卡点分析与推进建议）\n## 五、待办与责任落实\n## 六、风险与建议\n语言精炼、面向管理者。直接输出 Markdown 正文，不要包代码块，不要包 JSON。` },
     { role: "user", content: `【统计】时间范围：最近 ${days} 天；会议 ${refreshed.length} 场；未解决问题 ${ledger.stats.issuesOpen} 个（最长挂起 ${ledger.stats.oldestOpenDays} 天）；已解决 ${ledger.stats.issuesResolved} 个；决定 ${ledger.stats.decisionsTotal} 条；待办 ${ledger.stats.actionsPending} 条。\n\n【会议列表】\n${meetingLines || "（无）"}\n\n【问题台账】\n${issueLines || "（无）"}\n\n【决定】\n${decisionLines || "（无）"}\n\n【待办】\n${actionLines || "（无）"}` },
-  ], 3000);
-  emit({ state: "succeeded", days, stats: ledger.stats, markdown: markdown.replace(/^```(?:markdown)?|```$/g, "").trim() });
+  ], 6000);
+  emit({ state: "succeeded", days, stats: ledger.stats, markdown });
 }
 
 
