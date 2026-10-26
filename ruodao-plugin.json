@@ -1,7 +1,7 @@
 {
   "id": "com.ruodao.meeting-assistant",
   "name": "会议助手（AI 参会 · 实时转写 · 纪要）",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "apiVersion": ">=0.1.0 <0.2.0",
   "description": "AI 会议助手：麦克风+系统内录双通道实时转写，云端 / 本机转写双通道，可选说话人分离与声纹识别，AI 参谋随时发言，会后结构化纪要与 Markdown 导出，会议记录本地持久化。",
   "requires": {
@@ -286,6 +286,81 @@
           ],
           "cwd": ".",
           "timeoutMs": 30000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.knowledge-extract",
+        "title": "知识库：抽取会议知识",
+        "description": "用 AI 从逐字稿抽取议题、决定、问题（含是否解决）与待办，写入会议知识卡片。传 meetingId 抽单场，传 all:true 扫描全部未抽取的会议。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "knowledge-extract"
+          ],
+          "cwd": ".",
+          "timeoutMs": 300000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.knowledge-ledger",
+        "title": "知识库：问题台账",
+        "description": "跨会议汇总问题（自动合并相似项、挂起天数、关联会议）、决定与待办，支持关键词过滤与人工状态覆写。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "knowledge-ledger"
+          ],
+          "cwd": ".",
+          "timeoutMs": 20000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.knowledge-issue-update",
+        "title": "知识库：更新问题状态",
+        "description": "人工修正台账条目：标记已解决/搁置/重开，补充备注或隐藏误抽取条目。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "knowledge-issue-update"
+          ],
+          "cwd": ".",
+          "timeoutMs": 20000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.knowledge-ask",
+        "title": "知识库：自然语言问答",
+        "description": "对全部本地会议记录提问：本地关键词检索相关片段 + 台账摘要喂给 AI，答案带 [编号] 出处，可回溯到具体会议与发言。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "knowledge-ask"
+          ],
+          "cwd": ".",
+          "timeoutMs": 180000
+        }
+      },
+      {
+        "id": "com.ruodao.meeting.assistant.knowledge-report",
+        "title": "知识库：周期报告",
+        "description": "按时间范围（默认 30 天）生成周报/月报：会议概览、决定了什么、解决了什么、未解决难题与卡点分析、待办落实、风险建议。缺失知识抽取自动补齐。",
+        "action": {
+          "type": "process",
+          "command": "node",
+          "args": [
+            "bin/meeting-assistant.mjs",
+            "knowledge-report"
+          ],
+          "cwd": ".",
+          "timeoutMs": 300000
         }
       }
     ]

@@ -3,7 +3,7 @@
   "label": "会议助手",
   "description": "会议管理工作台：实时会议（麦克风+系统内录 / 可选云端精转写）、录音文件转写（本机或云端 + 说话人分离）、会议记录与说话人维护、AI 参谋、纪要与导出。本机语音模型与面试助手、语音通话共用同一套模型目录，说话人模型按需下载。",
   "icon": "AudioLines",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "author": "Ruodao",
   "capabilities": [
     "commands",
@@ -18,7 +18,8 @@
     "meeting-minutes",
     "realtime-loop",
     "file-transcription",
-    "meeting-records"
+    "meeting-records",
+    "meeting-knowledge"
   ],
   "configFields": [
     {

@@ -1204,7 +1204,315 @@ async function appendSegments(stdin) {
   emit({ state: "succeeded", meetingId, segments, segmentCount: meeting.segments.length, speakers: meeting.speakers });
 }
 
-/* ---------------- main ---------------- */
+/* ---------------- 会议知识库（P0-P2：智能抽取 / 问题台账 / 问答 / 周期报告 / 遗留跟踪） ---------------- */
+
+function knowledgeOverridesFile() {
+  return path.join(dataDir(), "knowledge-overrides.json");
+}
+
+async function loadKnowledgeOverrides() {
+  const file = knowledgeOverridesFile();
+  if (!existsSync(file)) return { status: {}, note: {}, hidden: [] };
+  try {
+    const data = JSON.parse(await readFile(file, "utf8"));
+    return {
+      status: data?.status && typeof data.status === "object" ? data.status : {},
+      note: data?.note && typeof data.note === "object" ? data.note : {},
+      hidden: Array.isArray(data?.hidden) ? data.hidden : [],
+    };
+  }
+  catch { return { status: {}, note: {}, hidden: [] }; }
+}
+
+async function saveKnowledgeOverrides(overrides) {
+  await mkdir(dataDir(), { recursive: true });
+  await writeFile(knowledgeOverridesFile(), JSON.stringify(overrides, null, 2), "utf8");
+}
+
+function normKeyText(text) {
+  return String(text || "").toLowerCase().replace(/[\s\p{P}\p{S}]/gu, "");
+}
+
+function issueKey(text) {
+  return crypto.createHash("md5").update(normKeyText(text)).digest("hex").slice(0, 12);
+}
+
+function bigramsOf(text) {
+  const s = normKeyText(text);
+  const out = new Set();
+  for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2));
+  return out;
+}
+
+/** 双字 bigram 相似度：jaccard 与包含度混合——中文短句变体（补了"仍未"、去掉尾缀）也能并上，零依赖。 */
+function textSimilarity(a, b) {
+  const A = bigramsOf(a);
+  const B = bigramsOf(b);
+  if (!A.size || !B.size) return 0;
+  let inter = 0;
+  for (const gram of A) if (B.has(gram)) inter++;
+  const jaccard = inter / (A.size + B.size - inter);
+  const containment = inter / Math.min(A.size, B.size);
+  return (jaccard + containment) / 2;
+}
+
+const ISSUE_SIMILAR_THRESHOLD = 0.42;
+
+/** 把所有会议的 knowledge 抽取结果摊平成台账：跨会议相似问题自动合并，人工覆写最后生效。 */
+function flattenKnowledge(meetings, overrides) {
+  const chrono = meetings.slice().sort((a, b) => (Number(a.createdAt) || 0) - (Number(b.createdAt) || 0));
+  const issues = [];
+  const decisions = [];
+  const actions = [];
+  for (const meeting of chrono) {
+    const k = meeting.knowledge;
+    if (!k || typeof k !== "object") continue;
+    const ref = { id: meeting.id, title: meeting.title, at: Number(meeting.createdAt) || 0 };
+    for (const item of (Array.isArray(k.issues) ? k.issues : [])) {
+      const text = String(item?.text ?? "").trim();
+      if (!text) continue;
+      const status = ["open", "resolved", "deferred"].includes(String(item?.status)) ? String(item.status) : "open";
+      const note = String(item?.note ?? "").trim();
+      const hit = issues.find((entry) => textSimilarity(entry.text, text) >= ISSUE_SIMILAR_THRESHOLD);
+      if (hit) {
+        hit.meetings.push(ref);
+        hit.lastAt = Math.max(hit.lastAt, ref.at);
+        if (ref.at >= hit.lastStatusAt) { hit.lastStatusAt = ref.at; hit.status = status; if (note) hit.note = note; if (text.length > hit.text.length) hit.text = text; }
+      } else {
+        issues.push({ key: issueKey(text), text, status, note, firstAt: ref.at, lastStatusAt: ref.at, lastAt: ref.at, meetings: [ref] });
+      }
+    }
+    for (const item of (Array.isArray(k.decisions) ? k.decisions : [])) {
+      const text = String(item?.text ?? item ?? "").trim();
+      if (!text) continue;
+      const hit = decisions.find((entry) => textSimilarity(entry.text, text) >= ISSUE_SIMILAR_THRESHOLD);
+      if (hit) { if (text.length > hit.text.length) hit.text = text; hit.meetings.push(ref); hit.lastAt = Math.max(hit.lastAt, ref.at); }
+      else decisions.push({ key: issueKey(text), text, firstAt: ref.at, lastAt: ref.at, meetings: [ref] });
+    }
+    for (const item of (Array.isArray(k.actions) ? k.actions : [])) {
+      const text = String(item?.text ?? item ?? "").trim();
+      if (!text) continue;
+      const owner = String(item?.owner ?? "").trim();
+      const due = String(item?.due ?? "").trim();
+      const hit = actions.find((entry) => textSimilarity(entry.text, text) >= ISSUE_SIMILAR_THRESHOLD);
+      if (hit) { if (text.length > hit.text.length) hit.text = text; if (owner) hit.owner = owner; if (due) hit.due = due; hit.meetings.push(ref); hit.lastAt = Math.max(hit.lastAt, ref.at); }
+      else actions.push({ key: issueKey(text), text, owner, due, firstAt: ref.at, lastAt: ref.at, meetings: [ref] });
+    }
+  }
+  // 人工覆写最后生效：改状态 / 改备注 / 隐藏误抽取条目
+  for (const list of [issues]) {
+    for (const entry of list) {
+      const patch = overrides.status[entry.key];
+      if (patch && ["open", "resolved", "deferred"].includes(patch)) entry.status = patch;
+      const note = overrides.note[entry.key];
+      if (note) entry.note = note;
+      entry.manual = Boolean(patch || note);
+    }
+  }
+  const hidden = new Set(overrides.hidden);
+  const daysOf = (ts) => Math.max(0, Math.floor((Date.now() - ts) / 86400000));
+  const issueView = issues.filter((entry) => !hidden.has(entry.key))
+    .map((entry) => ({ ...entry, daysOpen: daysOf(entry.firstAt), daysStale: daysOf(entry.lastAt), meetings: entry.meetings.slice(-10) }))
+    .sort((a, b) => (a.status === "open" ? 0 : 1) - (b.status === "open" ? 0 : 1) || b.daysOpen - a.daysOpen);
+  const decisionView = decisions.filter((entry) => !hidden.has(entry.key)).map((entry) => ({ ...entry, meetings: entry.meetings.slice(-10) })).sort((a, b) => b.lastAt - a.lastAt);
+  const actionView = actions.filter((entry) => !hidden.has(entry.key)).map((entry) => ({ ...entry, meetings: entry.meetings.slice(-10) })).sort((a, b) => b.lastAt - a.lastAt);
+  const stats = {
+    meetingsCovered: chrono.filter((m) => m.knowledge).length,
+    meetingsTotal: chrono.length,
+    issuesOpen: issueView.filter((entry) => entry.status === "open").length,
+    issuesResolved: issueView.filter((entry) => entry.status === "resolved").length,
+    issuesDeferred: issueView.filter((entry) => entry.status === "deferred").length,
+    actionsPending: actionView.length,
+    decisionsTotal: decisionView.length,
+    oldestOpenDays: issueView.filter((entry) => entry.status === "open").reduce((max, entry) => Math.max(max, entry.daysOpen), 0),
+  };
+  return { issues: issueView, decisions: decisionView, actions: actionView, stats };
+}
+
+async function knowledgeExtract(stdin) {
+  const meetings = await loadMeetings();
+  const meetingId = (stdin.meetingId || "").trim();
+  const targets = meetingId
+    ? meetings.filter((m) => m.id === meetingId)
+    : stdin.all === true || stdin.all === "true"
+      ? meetings.filter((m) => m.segments.length && !m.knowledge)
+      : [];
+  if (!targets.length) {
+    if (meetingId) fail(`会议不存在：${meetingId}`);
+    emit({ state: "succeeded", extracted: 0, skipped: 0, message: "所有会议都已抽取过，无需重建知识索引" });
+    return;
+  }
+  const results = [];
+  let lastError = "";
+  for (const meeting of targets) {
+    if (!meeting.segments.length) { results.push({ meetingId: meeting.id, title: meeting.title, skipped: true }); continue; }
+    const context = meeting.context ? `会议背景：${meeting.context}\n` : "";
+    const roster = meeting.speakers.length ? `发言人：${meeting.speakers.map((s) => s.name).join("、")}\n` : "";
+    try {
+      const raw = await chatJson([
+        { role: "system", content: `你是会议知识抽取引擎。从逐字稿中严格按事实抽取，输出 JSON：{"topics":["议题"],"decisions":["达成的决定/结论"],"issues":[{"text":"提出的问题或难题","status":"open|resolved|deferred","note":"一句话现状"}],"actions":[{"text":"待办事项","owner":"负责人或待确认","due":"截止时间或空"}]}。规则：只提取逐字稿中真实出现的内容，不编造；问题包括明确的疑问、风险、卡点、"下次再议"的悬而未决事项；讨论中已给出结论的问题 status 用 resolved；明确推迟的用 deferred。无内容的数组留空。` },
+        { role: "user", content: `${context}${roster}【会议「${meeting.title}」逐字稿】\n${transcriptText(meeting, 300)}` },
+      ], 2000);
+      const parsed = parseJsonLoose(raw);
+      if (!parsed) throw new Error("AI 未返回有效 JSON");
+      const knowledge = {
+        extractedAt: Date.now(),
+        topics: (Array.isArray(parsed.topics) ? parsed.topics : []).map((t) => String(t).trim()).filter(Boolean).slice(0, 20),
+        decisions: (Array.isArray(parsed.decisions) ? parsed.decisions : []).map((t) => ({ text: String(typeof t === "string" ? t : t?.text ?? "").trim() })).filter((t) => t.text).slice(0, 30),
+        issues: (Array.isArray(parsed.issues) ? parsed.issues : []).map((t) => ({ text: String(t?.text ?? "").trim(), status: ["open", "resolved", "deferred"].includes(String(t?.status)) ? String(t.status) : "open", note: String(t?.note ?? "").trim() })).filter((t) => t.text).slice(0, 40),
+        actions: (Array.isArray(parsed.actions) ? parsed.actions : []).map((t) => ({ text: String(t?.text ?? "").trim(), owner: String(t?.owner ?? "").trim(), due: String(t?.due ?? "").trim() })).filter((t) => t.text).slice(0, 30),
+      };
+      const saved = await withMeeting(meeting.id, (m) => ({ ...m, knowledge }));
+      results.push({ meetingId: meeting.id, title: meeting.title, topics: knowledge.topics.length, decisions: knowledge.decisions.length, issues: knowledge.issues.length, actions: knowledge.actions.length, extractedAt: saved.knowledge.extractedAt });
+    } catch (error) {
+      lastError = String(error?.message ?? error);
+      results.push({ meetingId: meeting.id, title: meeting.title, error: lastError });
+    }
+  }
+  const okCount = results.filter((r) => !r.error && !r.skipped).length;
+  if (!okCount && lastError && targets.length === 1) fail(`知识抽取失败：${lastError}`);
+  emit({ state: "succeeded", extracted: okCount, skipped: results.length - okCount, results });
+}
+
+function filterLedgerByQuery(ledger, query) {
+  const q = String(query ?? "").trim();
+  if (!q) return ledger;
+  const grams = [...bigramsOf(q)];
+  const scoreOf = (text) => {
+    const grams2 = [...bigramsOf(text)];
+    if (!grams.length || !grams2.length) return normKeyText(text).includes(normKeyText(q)) ? 1 : 0;
+    let hit = 0;
+    for (const g of grams) if (grams2.includes(g)) hit++;
+    return hit / grams.length;
+  };
+  return {
+    ...ledger,
+    issues: ledger.issues.filter((entry) => scoreOf(entry.text) >= 0.25 || entry.status === q),
+    decisions: ledger.decisions.filter((entry) => scoreOf(entry.text) >= 0.25),
+    actions: ledger.actions.filter((entry) => scoreOf(entry.text) >= 0.25 || scoreOf(entry.owner) >= 0.5),
+  };
+}
+
+function knowledgeLedger(stdin) {
+  return (async () => {
+    const meetings = await loadMeetings();
+    const overrides = await loadKnowledgeOverrides();
+    const ledger = filterLedgerByQuery(flattenKnowledge(meetings, overrides), stdin.q);
+    emit({ state: "succeeded", dataDir: dataDir(), ...ledger });
+  })();
+}
+
+async function knowledgeIssueUpdate(stdin) {
+  const key = (stdin.key || "").trim();
+  if (!key) fail("缺少 key：请传入台账条目的 key");
+  const overrides = await loadKnowledgeOverrides();
+  const status = (stdin.status || "").trim();
+  if (status) {
+    if (!["open", "resolved", "deferred"].includes(status)) fail(`非法状态：${status}（open / resolved / deferred）`);
+    overrides.status[key] = status;
+  }
+  if (stdin.hidden === true) overrides.hidden.push(key);
+  if (typeof stdin.note === "string") {
+    if (stdin.note.trim()) overrides.note[key] = stdin.note.trim();
+    else delete overrides.note[key];
+  }
+  await saveKnowledgeOverrides(overrides);
+  const meetings = await loadMeetings();
+  const ledger = flattenKnowledge(meetings, overrides);
+  emit({ state: "succeeded", key, ...ledger });
+}
+
+/** 简单关键词检索：问题分词（拉丁词 + 中文字 bigram）对逐字稿句子打分。 */
+function questionTerms(question) {
+  const terms = new Set();
+  for (const word of String(question || "").toLowerCase().match(/[a-z0-9][a-z0-9._-]{1,}/g) ?? []) terms.add(word);
+  const cjk = String(question || "").replace(/[^\u4e00-\u9fff]/g, "");
+  for (let i = 0; i < cjk.length - 1; i++) terms.add(cjk.slice(i, i + 2));
+  for (const ch of cjk) if (cjk.length <= 4) terms.add(ch);
+  return [...terms];
+}
+
+async function knowledgeAsk(stdin) {
+  const question = (stdin.question || "").trim();
+  if (!question) fail("缺少 question：请输入你想问的问题");
+  const days = Math.min(Math.max(Number(stdin.days) || 180, 7), 3650);
+  const since = Date.now() - days * 86400000;
+  const meetings = (await loadMeetings()).filter((m) => (Number(m.createdAt) || 0) >= since);
+  if (!meetings.length) fail(`最近 ${days} 天没有会议记录，先开会或调整时间范围`);
+  const terms = questionTerms(question);
+  if (!terms.length) fail("问题太短，请多写几个字方便检索");
+  const scored = [];
+  for (const meeting of meetings) {
+    for (const segment of meeting.segments) {
+      const text = String(segment.text || "");
+      if (!text) continue;
+      const hay = normKeyText(text);
+      let hit = 0;
+      for (const term of terms) if (hay.includes(normKeyText(term))) hit++;
+      if (hit > 0) scored.push({ meeting, segment, hit });
+    }
+  }
+  scored.sort((a, b) => b.hit - a.hit || (b.segment.at || 0) - (a.segment.at || 0));
+  const top = scored.slice(0, 40);
+  const ledger = filterLedgerByQuery(flattenKnowledge(meetings, await loadKnowledgeOverrides()), question);
+  const ledgerLines = [
+    ...ledger.issues.slice(0, 8).map((entry) => `- [问题·${entry.status === "open" ? "未解决" : entry.status === "resolved" ? "已解决" : "已搁置"}] ${entry.text}（提出于 ${new Date(entry.firstAt).toLocaleDateString("zh-CN")}，讨论过 ${entry.meetings.length} 次）`),
+    ...ledger.decisions.slice(0, 6).map((entry) => `- [决定] ${entry.text}（${new Date(entry.firstAt).toLocaleDateString("zh-CN")}）`),
+  ].join("\n");
+  const contextBlocks = top.slice(0, 30).map((entry, index) => {
+    const date = new Date(entry.meeting.createdAt).toLocaleDateString("zh-CN");
+    const speaker = entry.segment.speaker || "某人";
+    return `[${index + 1}] 会议「${entry.meeting.title}」(${date}) ${speaker}：${entry.segment.text}`;
+  });
+  const prompt = [
+    `【知识库台账摘要】\n${ledgerLines || "（无匹配条目）"}`,
+    `【逐字稿相关片段（按相关度排序）】\n${contextBlocks.join("\n") || "（无匹配片段）"}`,
+  ].join("\n\n");
+  const answer = await chatJson([
+    { role: "system", content: `你是企业会议知识库问答助手。只依据提供的材料回答，用中文 Markdown；引用材料时在句尾标注 [编号]；材料不足以回答时明确说明"知识库中没有找到相关记录"，并给出最接近的信息。不要编造。` },
+    { role: "user", content: `【问题】${question}\n\n${prompt}` },
+  ], 2000);
+  const sources = top.slice(0, 8).map((entry, index) => ({
+    index: index + 1,
+    meetingId: entry.meeting.id,
+    title: entry.meeting.title,
+    at: entry.segment.at,
+    speaker: entry.segment.speaker || "",
+    text: String(entry.segment.text || "").slice(0, 200),
+  }));
+  emit({ state: "succeeded", question, answer: answer.trim(), sources, searchedMeetings: meetings.length, searchedDays: days });
+}
+
+async function knowledgeReport(stdin) {
+  const days = Math.min(Math.max(Number(stdin.days) || 30, 1), 3650);
+  const since = Date.now() - days * 86400000;
+  const meetings = (await loadMeetings()).filter((m) => (Number(m.createdAt) || 0) >= since);
+  if (!meetings.length) fail(`最近 ${days} 天没有会议记录`);
+  const missing = meetings.filter((m) => m.segments.length && !m.knowledge);
+  if (missing.length) {
+    // 自动补齐缺失的知识抽取，再出报告（受 command 超时保护，单场约 10-20 秒）
+    for (const meeting of missing.slice(0, 12)) {
+      try { await knowledgeExtract({ meetingId: meeting.id }); } catch { /* 单场失败不阻塞报告 */ }
+    }
+  }
+  const refreshed = (await loadMeetings()).filter((m) => (Number(m.createdAt) || 0) >= since);
+  const ledger = flattenKnowledge(refreshed, await loadKnowledgeOverrides());
+  const meetingLines = refreshed.slice().reverse().map((m) => {
+    const k = m.knowledge;
+    const topics = k && Array.isArray(k.topics) ? k.topics.slice(0, 5).join("、") : "";
+    return `- ${new Date(m.createdAt).toLocaleDateString("zh-CN")}「${m.title}」${m.customer ? `（客户：${m.customer}）` : ""}${topics ? `：${topics}` : ""}`;
+  }).join("\n");
+  const issueLines = ledger.issues.map((entry) => `- [${entry.status === "open" ? "未解决" : entry.status === "resolved" ? "已解决" : "已搁置"}] ${entry.text}（首提 ${new Date(entry.firstAt).toLocaleDateString("zh-CN")}，挂起 ${entry.daysOpen} 天，讨论 ${entry.meetings.length} 次${entry.note ? `；现状：${entry.note}` : ""}）`).join("\n");
+  const decisionLines = ledger.decisions.slice(0, 40).map((entry) => `- ${entry.text}（${new Date(entry.firstAt).toLocaleDateString("zh-CN")}）`).join("\n");
+  const actionLines = ledger.actions.slice(0, 40).map((entry) => `- ${entry.text}${entry.owner ? `（负责人：${entry.owner}` : "（负责人：待确认"}${entry.due ? `，截止：${entry.due}` : ""}）`).join("\n");
+  const markdown = await chatJson([
+    { role: "system", content: `你是企业会议知识库分析助手。基于给定材料撰写一份中文 Markdown 周期报告（不要编造材料之外的内容），包含以下小节：\n## 一、本阶段会议概览\n## 二、做出哪些决定\n## 三、解决了哪些问题\n## 四、仍未解决的难题（按挂起时间排序，逐条给出卡点分析与推进建议）\n## 五、待办与责任落实\n## 六、风险与建议\n语言精炼、面向管理者。` },
+    { role: "user", content: `【统计】时间范围：最近 ${days} 天；会议 ${refreshed.length} 场；未解决问题 ${ledger.stats.issuesOpen} 个（最长挂起 ${ledger.stats.oldestOpenDays} 天）；已解决 ${ledger.stats.issuesResolved} 个；决定 ${ledger.stats.decisionsTotal} 条；待办 ${ledger.stats.actionsPending} 条。\n\n【会议列表】\n${meetingLines || "（无）"}\n\n【问题台账】\n${issueLines || "（无）"}\n\n【决定】\n${decisionLines || "（无）"}\n\n【待办】\n${actionLines || "（无）"}` },
+  ], 3000);
+  emit({ state: "succeeded", days, stats: ledger.stats, markdown: markdown.replace(/^```(?:markdown)?|```$/g, "").trim() });
+}
+
+
 
 const stdin = await readStdin();
 // 工作台 UI 通过 stdin JSON 的 config 字段传入配置，覆盖同名环境变量。
@@ -1236,4 +1544,9 @@ else if (mode === "minutes") await generateMinutes(stdin);
 else if (mode === "transcribe-file") await transcribeFile(stdin);
 else if (mode === "import-transcript") await importTranscript(stdin);
 else if (mode === "meeting-export") await meetingExport(stdin);
-else fail(`未知模式：${mode}（支持 doctor / meeting-create / meetings-list / meeting-get / meeting-update / meeting-end / meeting-delete / meeting-speaker-update / record-segment / append-segments / segment-update / segment-delete / segment-feedback / ai-respond / suggest-phrases / memory-draft / memory-confirm / memory-list / minutes / transcribe-file / import-transcript / meeting-export）`);
+else if (mode === "knowledge-extract") await knowledgeExtract(stdin);
+else if (mode === "knowledge-ledger") await knowledgeLedger(stdin);
+else if (mode === "knowledge-issue-update") await knowledgeIssueUpdate(stdin);
+else if (mode === "knowledge-ask") await knowledgeAsk(stdin);
+else if (mode === "knowledge-report") await knowledgeReport(stdin);
+else fail(`未知模式：${mode}（支持 doctor / meeting-create / meetings-list / meeting-get / meeting-update / meeting-end / meeting-delete / meeting-speaker-update / record-segment / append-segments / segment-update / segment-delete / segment-feedback / ai-respond / suggest-phrases / memory-draft / memory-confirm / memory-list / minutes / transcribe-file / import-transcript / meeting-export / knowledge-extract / knowledge-ledger / knowledge-issue-update / knowledge-ask / knowledge-report）`);
