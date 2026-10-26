@@ -1,0 +1,5 @@
+.codex-market.json
+*.zip
+node_modules/
+.DS_Store
+Thumbs.db
