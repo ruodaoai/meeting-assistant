@@ -1,18 +1,21 @@
 {
-  "displayName": "会议助手（AI 参会 · 实时转写 · 纪要）",
+  "displayName": "会议助手",
   "slug": "meeting-assistant",
-  "summary": "双通道录音（麦克风+系统内录）、云端/本地双通道转写、AI 参谋随时参会发言、会后纪要生成与 Markdown 导出。",
-  "description": "对标 ai-meeting-workstation 的会议助手功能插件，遵循若道桌面端插件开发文档的声明优先模型，提供 18 个命令：\n1. 环境自检：ffmpeg、麦克风/系统内录设备、云端/本地转写通道与 LLM 配置检查。\n2. 会议管理：创建 / 列出 / 查看 / 结束 / 删除会议，全部记录本地持久化。\n3. 实时会议：并行录制麦克风（我方）与系统内录（会议方）并分别转写，写回会议时间线。\n4. AI 参会：随时邀请 AI 参谋基于最近发言生成可直接照读的发言稿与要点。\n5. 会后纪要：LLM 生成结构化 Markdown 纪要（概要/讨论/决议/待办/风险）。\n6. 文件转写：本地录音文件（≤200MB）走云端或本地 STT 通道转写。\n7. 导出：逐字稿 + 纪要导出 Markdown 文件。\n\n依赖：Node >= 18、ffmpeg（PATH）。模型复用若道模型管理（STT/LLM 绑定自动注入 Key），本地转写支持任意 OpenAI 兼容 whisper/FunASR 服务。\n\n隐私：会议数据只存本机 ~/.ruodao-meeting-assistant/，音频临时文件转写后立即删除；本地通道全程不出本机。",
+  "summary": "开会时帮你听、帮你记、还能替你说话：麦克风与系统内录双通道并行录音，云端或本地双通道转写（本地全程不联网），随时邀请 AI 参谋基于最近发言发言，会后一键生成结构化 Markdown 纪要。会议记录全部存在本机。",
+  "description": "对标 ai-meeting-workstation 的产品形态，做成一插即用的会议工作台。\n\n【双录音通道】\n麦克风（我方发言）+ 系统内录（线上会议对方声音）并行采集、分别转写。说话人不用靠模型猜——左边是对方，右边是我，字幕天然分轨。Windows 下系统内录需要启用「立体声混音」或装 virtual-audio-capturer，环境自检会直接告诉你缺什么。\n\n【双转写通道】\n• 云端：用「模型管理」里绑定的 STT 服务（OpenAI 兼容），识别准、无需本地算力；\n• 本地：接本地 whisper / FunASR 的 OpenAI 兼容服务（可配合「本地转写引擎」插件一键装好），全程不出本机。\n两条通道随时切换，同一场会议中途换也可以。\n\n【AI 参会】\n会议进行中可以随时邀请 AI 参谋发言：它读取最近一段上下文，给出发言稿与要点，并以「AI 参谋」的身份写回会议时间线。另有快捷话术推荐——结合会议标题、背景与最近发言给 6 条可一键填入输入框的指令，只进输入框、不写时间线，避免污染记录。\n\n【会后纪要】\n一键生成结构化 Markdown：概要、讨论内容、结论决议、待办、风险五段式；也能把逐字稿 + 纪要整体导出 .md，拿去贴周报或知识库。\n\n【文件转写】\n已有录音（≤200MB）直接上传转写，写成一条独立会议记录，不用重新开会。\n\n【数据在哪】\n全部会议记录存在本机 ~/.ruodao-meeting-assistant/（JSON），可导出、可删除；音频临时文件转写完立即删除。云端通道只把转写文本发给你配置的 STT / LLM 服务，本地通道全程不出本机。\n\n依赖 Node 18+ 与 PATH 里的 ffmpeg；「环境自检」会逐项检查 ffmpeg、录音设备、云端/本地转写与 LLM 配置。",
   "author": "Ruodao",
   "category": "Utilities",
   "tags": [
     "会议",
-    "语音识别",
-    "AI 参会",
     "会议纪要",
-    "转写"
+    "语音转写",
+    "实时字幕",
+    "AI 参会",
+    "录音",
+    "Markdown",
+    "本地转写"
   ],
-  "version": "1.4.0",
+  "version": "1.5.1",
   "repositoryUrl": "",
   "sourceRef": "",
   "pluginPath": "",
@@ -26,5 +29,6 @@
   ],
   "hasMcpServers": false,
   "hasSkills": false,
-  "changelog": "1.4.0 新增「AI 参会」：开启后 AI 参谋作为参会者持续听会，按节奏自动接话、可配置参会频率，回复自动标记「自动参会」且支持自动朗读；手动发言与自动参会共用同一 AI 模型，自动接话不重复历史观点。旧版：1.3.1 常见话术改为弹窗选择并填入输入框（不直接发送），支持换一批与基于会议上下文的 AI 推荐。"
+  "changelog": "1.4.0 新增「AI 参会」：开启后 AI 参谋作为参会者持续听会，按节奏自动接话、可配置参会频率，回复自动标记「自动参会」且支持自动朗读；手动发言与自动参会共用同一 AI 模型，自动接话不重复历史观点。旧版：1.3.1 常见话术改为弹窗选择并填入输入框（不直接发送），支持换一批与基于会议上下文的 AI 推荐。",
+  "readme": "# 会议助手（AI 参会 · 实时转写 · 纪要）\n\n对标 [ai-meeting-workstation](https://github.com/hufeide/ai-meeting-workstation) 的产品形态，以若道桌面端功能插件实现：\n\n- **双录音通道**：麦克风（我方发言）+ 系统内录（线上会议对方声音），并行采集、分别转写。\n- **双转写通道**：云端（若道「模型管理」STT 绑定，OpenAI 兼容）与本地（本地 whisper / FunASR 的 OpenAI 兼容服务，如 faster-whisper-server），可随时切换；本地通道不联网。\n- **AI 参会**：随时邀请 AI 参谋基于最近发言发言，观点作为「AI 参谋」写回会议时间线。\n- **会后纪要**：一键生成结构化 Markdown 纪要（概要 / 讨论内容 / 结论决议 / 待办 / 风险）。\n- **会议持久化**：全部会议记录保存在本机 `~/.ruodao-meeting-assistant/`（JSON），可导出 Markdown、可删除。\n- **文件转写**：已有录音直接上传转写（≤200MB），写入独立会议记录。\n\n## 配置（环境变量 / 工作台配置项）\n\n| 变量 | 说明 |\n| --- | --- |\n| `RUODAO_AUDIO_DEVICE` | 麦克风设备名（dshow，与自检列表完全一致） |\n| `RUODAO_SYSTEM_AUDIO_DEVICE` | 系统内录设备名；Windows 需启用「立体声混音」或安装 virtual-audio-capturer |\n| `RUODAO_CAPTURE_SECONDS` | 每轮录音时长，默认 12（3–120） |\n| `RUODAO_STT_CHANNEL` | `cloud`（默认）/ `local` |\n| `RUODAO_STT_*` | 云端转写，由宿主「转写模型绑定」自动注入，无需手填 |\n| `RUODAO_LOCAL_STT_BASE_URL` / `_API_KEY` / `_MODEL` | 本地 OpenAI 兼容转写服务（Key 通常留空） |\n| `RUODAO_LLM_*` | 对话模型，由宿主「文本模型绑定」自动注入 |\n| `RUODAO_MEETING_CONTEXT` | 会议主题与背景，拼进 AI 提示词 |\n| `RUODAO_MEETING_ROLE` | AI 参谋人设，默认「资深会议参谋」 |\n\n依赖：Node ≥ 18、ffmpeg（PATH）。\n\n## 隐私说明\n\n会议数据只保存在本机数据目录；音频临时文件在转写后立即删除。云端通道会把转写文本发送到你配置的 STT/LLM 服务；本地通道全程不出本机。"
 }
